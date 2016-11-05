@@ -14,6 +14,7 @@ compress zfs snapshot
 1.	zfs send "snapshot name" | xz > "compress file name"
 
 aes256
+
 1.	encryption
 	-	openssl aes-256-cbc -in "filename" -out "filename.enc"
 2.	decryption
