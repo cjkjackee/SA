@@ -1,0 +1,13 @@
+#!/bin/sh
+
+data=$(echo $1 | egrep '\s*')
+case $data in
+	"") 	echo "please enter the data name"
+		;;
+	*)	sudo zfs send $data | xz > "${data}.xz"
+		openssl aes-256-cbc -in "${data}.xz" -out "${data}.xz.enc"
+		gdrive upload "${data}.xz.enc"
+		rm "${data}.xz"
+		rm "${data}.xz.enc"
+		;;
+esac

@@ -1,0 +1,70 @@
+#!/bin/sh
+
+
+option=$(echo $1 | egrep '\-\-')
+case $option in
+	"--list")
+		case $2 in
+			"")	awk 'BEGIN{print "ID\tDataset\t\tTime"} {print NR "\t" $1 "\t\t" $2 " " $3}' ./.list
+				;;
+			*)	awk 'BEGIN{print "ID\tDataset\t\tTime"} /^'"$2"'/{print NR "\t" $1 "\t\t" $2 " " $3}' ./.list
+				;;
+		esac
+		;;
+	"--delete")
+		case $2 in
+			"")	echo "please enter snapshot name or ID"
+				;;
+			*)	n=$(echo $2 | awk '/^[0-9]*$/{print}')
+				case $n in
+					*)	snap=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $1}' ./.list)
+						d=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $2}' ./.list)
+						TIME=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $3}' ./.list)
+						sudo zfs destroy "${snap}@${d} ${TIME}"
+						awk -v n=$n '{if(NR==n){}else{print}}' ./.list > .tmp
+						cat .tmp > ./.list
+						rm .tmp
+						;;
+					"")	dataset=$(echo $2 | awk '/\S*/{print}')
+						case $dataset in
+							"")	echo "please enter snapshot name or ID"
+								;;
+							*)	echo "please enter snapshot name or ID"
+								;;
+						esac			
+						;;
+				esac
+				;;
+		esac
+		;;
+	"")	dataset=$(echo $1 | awk '/\S*/{print}')
+		case $dataset in
+			"")	echo "please enter the dataset name"
+				;;
+			*)	D=$(date +"%Y-%m-%d %T")
+				sudo zfs snapshot "${dataset}@${D}"
+				echo -e "${dataset}\t${D}" >> ./.list
+				rotation=$(echo $2 | awk '/^[0-9]*$/{print}')
+				if [ -z "${rotation}" ] || [ ${rotation} -ge 30 ];then
+					rotation=30
+				fi
+				num=$(cat ./.list | awk 'BEGIN{sum=0} /^'"$dataset"'/{sum++} END{print sum}')
+				if [ ${num} -gt ${rotation} ];then
+					de=$num-$rotation
+					for i in [0..$de]
+					do
+						snap=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $1;n++}}' ./.list)
+						d=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $2;n++}}' ./.list)
+						TIME=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $3;n++}}' ./.list)
+						sudo zfs destroy "${snap}@${d} ${TIME}"
+						awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){n++}else{print}}' ./.list > .tmp
+						cat .tmp > ./.list
+						rm .tmp
+					done
+				fi
+				;;
+		esac
+		;;
+	*)	echo "unknow option"
+		;;
+esac
