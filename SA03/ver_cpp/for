@@ -1,0 +1,6 @@
+#!/bin/sh
+
+for i in $(seq 0 30); do
+	./zbackup tank1/demo2
+	sleep 1
+done

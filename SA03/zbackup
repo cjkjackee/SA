@@ -15,23 +15,30 @@ case $option in
 		case $2 in
 			"")	echo "please enter snapshot name or ID"
 				;;
-			*)	n=$(echo $2 | awk '/^[0-9]*$/{print}')
+			*)	n=$(echo $2 | egrep -o '\S*')
 				case $n in
-					*)	snap=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $1}' ./.list)
-						d=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $2}' ./.list)
-						TIME=$(awk -v n=$n 'BEGIN{num=0} NR==n{print $3}' ./.list)
-						sudo zfs destroy "${snap}@${d} ${TIME}"
-						awk -v n=$n '{if(NR==n){}else{print}}' ./.list > .tmp
-						cat .tmp > ./.list
-						rm .tmp
+					*)	res=$(cat ./.list | egrep -o '\S*')
+						case $res in
+							'')	echo "the list is empty"
+								;;
+							*)	x=$(echo $2 | egrep '[0-9]*')
+									num=$(awk '/\S*/{sum++} END{print sum}' ./.list)
+									i=0
+									while [ ${i} -lt ${num} ] 
+									do
+										snap=$(awk -v n=$n 'BEGIN{num=0}/^'"$n"'/{if(num==0){print $1;num++}}' ./.list)
+										d=$(awk -v n=$n 'BEGIN{num=0}/^'"$n"'/{if(num==0){print $2;num++}}' ./.list)
+										TIME=$(awk -v n=$n 'BEGIN{num=0}/^'"$n"'/{if(num==0){print $3;num++}}' ./.list)
+										sudo zfs destroy "${snap}@${d}_${TIME}"
+										awk -v n=$n 'BEGIN{num=0} {if($1==n && num==0){num++}else{print}}' ./.list > .tmp
+										cat .tmp > ./.list
+										rm .tmp
+										i=$((i+1))
+									done
+									;;
+						esac
 						;;
-					"")	dataset=$(echo $2 | awk '/\S*/{print}')
-						case $dataset in
-							"")	echo "please enter snapshot name or ID"
-								;;
-							*)	echo "please enter snapshot name or ID"
-								;;
-						esac			
+					"")	echo "please enter the snapshot name"
 						;;
 				esac
 				;;
@@ -42,17 +49,21 @@ case $option in
 			"")	echo "please enter the dataset name"
 				;;
 			*)	D=$(date +"%Y-%m-%d %T")
-				sudo zfs snapshot "${dataset}@${D}"
-				echo -e "${dataset}\t${D}" >> ./.list
+				time=$(date +"%Y-%m-%d_%T")
+				i=0
+				sudo zfs snapshot "${dataset}@${time}"
+				res=$?
+				case $res in
+					0)	echo -e "${dataset}\t${D}" >> ./.list
+						;;
+				esac
 				rotation=$(echo $2 | awk '/^[0-9]*$/{print}')
 				if [ -z "${rotation}" ] || [ ${rotation} -ge 30 ];then
 					rotation=30
 				fi
 				num=$(cat ./.list | awk 'BEGIN{sum=0} /^'"$dataset"'/{sum++} END{print sum}')
-				if [ ${num} -gt ${rotation} ];then
+				if [ ${num} -ge ${rotation} ];then
 					de=$num-$rotation
-					for i in [0..$de]
-					do
 						snap=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $1;n++}}' ./.list)
 						d=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $2;n++}}' ./.list)
 						TIME=$(awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){print $3;n++}}' ./.list)
@@ -60,6 +71,7 @@ case $option in
 						awk 'BEGIN{n=0} /^'"$dataset"'/{if(n==0){n++}else{print}}' ./.list > .tmp
 						cat .tmp > ./.list
 						rm .tmp
+						i=$((${i}+1))
 					done
 				fi
 				;;
