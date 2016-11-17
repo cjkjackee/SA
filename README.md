@@ -42,5 +42,6 @@ receive snapshot
 1.	zfs receive "snapshot name" < "file path"
 
 roll back
+
 `zfs rollback "snapshot name"`
 
