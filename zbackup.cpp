@@ -9,7 +9,7 @@
 using namespace std;
 
 void list (bool,string);
-void del(string);
+void del(string, int);
 void create(string, int);
 
 int main (int argc, char** argv)
@@ -25,6 +25,35 @@ int main (int argc, char** argv)
 	cmd1 = argv[1];
 	if (cmd1 == "--list")
 	{
+		fstream open;
+		string s;
+		vector<string> snap;
+
+		system("zfs get -t snapshot all | awk '/zbackup/{print $1}' > .var");
+		open.open(".var");
+		while (open.eof())
+		{
+			open >> s;
+			for (string::iterator it=s.begin();it!=s.end();++it)
+			{
+				if (*it == '@')
+					*it = '\t';
+				else if (*it == '_')
+					*it = ' ';
+			}
+			snap.push_back(s);
+		}
+		open.close();
+		system("rm .var");
+		
+		system("touch .list");
+		open.open(".list");
+		for (vector<string>::iterator it=snap.begin();it!=snap.end();++it)
+		{
+			open << *it << endl;
+		}
+		open.close();
+
 		if (argc-1 < 2)
 			list (true,"");
 		else 
@@ -34,9 +63,15 @@ int main (int argc, char** argv)
 	{
 		if (argc-1 < 2)
 			cout << "please enter the snapshot name" << endl;
+		else if (argc-1 < 3)
+		{
+			del(argv[2],0);
+		}
 		else 
 		{
-			del(argv[2]);
+			int num = atoi(argv[3]);
+
+			del(argv[2],num);
 		}
 	}
 	else
@@ -65,41 +100,142 @@ void list (bool all, string snapshot)
 	}
 	else 
 	{
-		FILE *open;
-		vector<string> data;
+		FILE *open, *open1, *open2;
+		int num;
+		vector<string> dataset, D, T;
 
-		open = fopen("./.list","r");
+		system("awk '{sum++} END{print sum}' ./.list > ./.num");
+		system("awk '{print $1}' ./.list > ./.dataset");
+		system("awk '{print $2}' ./.list > ./.D");
+		system("awk '{print $3}' ./.list > ./.T");
+		open = fopen("./.num","r");
+		fscanf(open,"%d",&num);
+		fclose(open);
+		open = fopen("./.dataset","r");
+		open1 = fopen("./.D","r");
+		open2 = fopen("./.T","r");
+		if (num==0)
+		{
+			cout << "the list is empty" << endl;
+			return;
+		}
+
+		for (int i=0;i<num;++i)
+		{
+			char str1[1000], str2[100], str3[100];
+			fgets(str1,1000,open);
+			str1[strlen(str1)-1] = '\0';
+			dataset.push_back(str1);
+			fgets(str2,100,open1);
+			str2[strlen(str2)-1] = '\0';
+			D.push_back(str2);
+			fgets(str3,100,open2);
+			str3[strlen(str3)-1] = '\0';
+			T.push_back(str3);
+		}
+		fclose(open);
+		fclose(open1);
+		fclose(open2);
+		system("rm ./.num");
+		system("rm ./.dataset");
+		system("rm ./.D");
+		system("rm ./.T");
+
+		for (int i=0;i<num;++i)
+		{
+			if (dataset[i] == snapshot)
+				cout << i+1 << "\t" <<  dataset[i] << "\t" << D[i] << " " << T[i] << endl;
+		}
 
 	}
 
 	return;
 }
 
-void del (string snapshot)
+void del (string snapshot ,int id)
 {
-	FILE* open;
-	FILE* num;
-	int n;
-	char str[1000];
-	vector<string> all; 
-
-	open = fopen (".list","r");
-	system("cat .list | awk '{sum++}END{print sum}' > .num");
-	num = fopen("./.num","r");
-	fscanf(num,"%d",&n);
-	fclose(num);
-	system("rm ./.num");
-
-	for (int i=0;i<n;i++)
+	FILE *open, *open1, *open2;
+	int num;
+	vector<string> dataset, D, T;
+	string cmd;
+	
+	system("awk '{sum++} END{print sum}' ./.list > ./.num");
+	system("awk '{print $1}' ./.list > ./.dataset");
+	system("awk '{print $2}' ./.list > ./.D");
+	system("awk '{print $3}' ./.list > ./.T");
+	open = fopen("./.num","r");
+	fscanf(open,"%d",&num);
+	fclose(open);
+	open = fopen("./.dataset","r");
+	open1 = fopen("./.D","r");
+	open2 = fopen("./.T","r");
+	
+	if (num==0)
 	{
-		fgets(str,1000,open);
-		all.push_back(str);
+		cout << "the list is empty" << endl;
+		return;
+	}
+
+	for (int i=0;i<num;++i)
+	{
+		char str1[1000], str2[100], str3[100];
+		fgets(str1,1000,open);
+		str1[strlen(str1)-1] = '\0';
+		dataset.push_back(str1);
+		fgets(str2,100,open1);
+		str2[strlen(str2)-1] = '\0';
+		D.push_back(str2);
+		fgets(str3,100,open2);
+		str3[strlen(str3)-1] = '\0';
+		T.push_back(str3);
 	}
 	fclose(open);
+	fclose(open1);
+	fclose(open2);
+	system("rm ./.num");
+	system("rm ./.dataset");
+	system("rm ./.D");
+	system("rm ./.T");
+	
+	if(id==0)
+	{
+		system("rm ./.list");
+		open = fopen("./.list","a");
+		for (unsigned int i=0;i<dataset.size();++i)
+		{
+			if (dataset[i]==snapshot)
+			{
+				cmd = "zfs destroy " + dataset[i] + "@" + D[i] + "_" + T[i];
+				system(cmd.c_str());
+			}
+			else
+			{
+				cmd =  dataset[i] + "\t" + D[i] + " " + T[i]+"\n";
+				fputs(cmd.c_str(),open);
+			}
+		}
+		fclose(open);
+	}
+	else 
+	{
+		system("rm ./.list");
+		open = fopen("./.list","a");
+		for (unsigned int i=0;i<dataset.size();++i)
+		{
+			if (i+1 == id)
+			{
+				cmd = "zfs destroy " + dataset[i] + "@" + D[i] + "_" + T[i];
+				system(cmd.c_str());
+			}
+			else 
+			{
+				cmd =  dataset[i] + "\t" + D[i] + " " + T[i]+"\n";
+				fputs(cmd.c_str(),open);
+			}
+		}
+		fclose(open);
+	}
 
-	//cmd = "sudo zfs destroy " + snapshot;
-	//cout << cmd.c_str() << endl;
-	//system(cmd.c_str());
 	return ;
 }
 
@@ -118,7 +254,7 @@ void create (string snapshot, int rotation)
 	fclose(open);
 	system("rm ./.date");
 
-	for (int i=0;i<time.size();++i)
+	for (unsigned int i=0;i<time.size();++i)
 	{
 		if (time[i]==' ')
 		{
@@ -128,7 +264,7 @@ void create (string snapshot, int rotation)
 	}
 
 	name = snapshot + "@" + time;
-	cmd = "sudo zfs snapshot " + name + "\n echo $? > .res";
+	cmd = "zfs snapshot " + name + "\n echo $? > .res";
 	system(cmd.c_str());
 	open = fopen(".res","r");
 	fscanf(open,"%d",&res);
@@ -140,6 +276,9 @@ void create (string snapshot, int rotation)
 		open = fopen("./.list","a");
 		fputs(data.c_str(),open);
 		fclose(open);
+		//set the property
+		string cmd = "zfs set zbackup:date=" + time + " " + name;
+		system(cmd.c_str());
 	}
 	else
 	{
@@ -184,7 +323,7 @@ void create (string snapshot, int rotation)
 	system("rm ./.D");
 	system("rm ./.T");
 	
-	for (int i=0;i<dataset.size();++i)
+	for (unsigned int i=0;i<dataset.size();++i)
 	{
 		if (dataset[i]==snapshot)
 			++current;
@@ -195,11 +334,11 @@ void create (string snapshot, int rotation)
 		int del = current - rotation;
 		system("rm .list");
 		open = fopen(".list","a");
-		for (int n=0,i=0;n<dataset.size();++n)
+		for (unsigned int n=0,i=0;n<dataset.size();++n)
 		{
 			if (dataset[n]==snapshot && i<del)
 			{
-				cmd = "sudo zfs destroy " + dataset[n] + "@" + D[n] + "_" + T[n];
+				cmd = "zfs destroy " + dataset[n] + "@" + D[n] + "_" + T[n];
 				system(cmd.c_str());
 				++i;
 			}
