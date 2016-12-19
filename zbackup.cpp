@@ -5,12 +5,14 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <regex>
 
 using namespace std;
 
 void list (bool,string);
 void del(string, int);
 void create(string, int);
+void daemon(string);
 
 int main (int argc, char** argv)
 {
@@ -25,15 +27,14 @@ int main (int argc, char** argv)
 	cmd1 = argv[1];
 	if (cmd1 == "--list")
 	{
-		fstream open;
+		fstream file;
 		string s;
 		vector<string> snap;
 
 		system("zfs get -t snapshot all | awk '/zbackup/{print $1}' > .var");
-		open.open(".var");
-		while (open.eof())
+		file.open(".var");
+		while (file >> s)
 		{
-			open >> s;
 			for (string::iterator it=s.begin();it!=s.end();++it)
 			{
 				if (*it == '@')
@@ -43,16 +44,16 @@ int main (int argc, char** argv)
 			}
 			snap.push_back(s);
 		}
-		open.close();
+		file.close();
 		system("rm .var");
 		
 		system("touch .list");
-		open.open(".list");
+		file.open(".list");
 		for (vector<string>::iterator it=snap.begin();it!=snap.end();++it)
 		{
-			open << *it << endl;
+			file << *it << endl;
 		}
-		open.close();
+		file.close();
 
 		if (argc-1 < 2)
 			list (true,"");
@@ -72,6 +73,36 @@ int main (int argc, char** argv)
 			int num = atoi(argv[3]);
 
 			del(argv[2],num);
+		}
+	}
+	else if (cmd1 == "-d" || cmd1 == "--daemon")
+	{
+		if (argc-1 < 2)
+			system("./zbackup daemon &");
+		else
+		{
+			string cmd2 = argv[2];
+			if (cmd2 == "-c" || cmd2 == "--config")
+			{
+				if (argc-1 < 3)
+					cout << "please enter the config file path" << endl;
+				else 
+				{
+					string cmd3 = argv[3];
+					string cmd = "./zbackup daemon " + cmd3 + "&";
+					system(cmd.c_str());
+				}
+			}
+		}
+	}
+	else if (cmd1=="daemon")
+	{
+		if (argc-1 < 2)
+			daemon("/usr/local/etc/zbackup.conf");
+		else
+		{
+			string cmd2 = argv[2];
+			daemon(cmd2);
 		}
 	}
 	else
@@ -96,7 +127,7 @@ void list (bool all, string snapshot)
 	cout << "ID\tdataset\t\ttime" << endl;
 	if(all)
 	{
-		system("awk '{print NR \"\t\" $1 \"\t\" $2 \" \" $3}' ./.list");
+		system("awk '{print NR \"\t\" $1 \"\t\" $2 \" \" $3}' .list");
 	}
 	else 
 	{
@@ -259,7 +290,10 @@ void create (string snapshot, int rotation)
 		if (time[i]==' ')
 		{
 			time[i] = '_';
-			break;
+		}
+		else if (time[i]=='\n')
+		{
+			time[i] = ' ';
 		}
 	}
 
@@ -277,7 +311,7 @@ void create (string snapshot, int rotation)
 		fputs(data.c_str(),open);
 		fclose(open);
 		//set the property
-		string cmd = "zfs set zbackup:date=" + time + " " + name;
+		string cmd = "zfs set zbackup:date=" + time + name;
 		system(cmd.c_str());
 	}
 	else
@@ -351,4 +385,83 @@ void create (string snapshot, int rotation)
 	}
 
 	return ;
+}
+
+void daemon (string path)
+{
+	fstream conf;
+	string s;
+	vector<string> snapshot;
+	vector<int> rotation;
+	vector<int> time;
+	regex policy("(policy=)(.*)")
+	
+	conf.open(path);
+	while(conf >> s)
+	{
+		if (s[0]=='[')
+		{
+			s[0] == ' ';
+			for (int i=0;;++i)
+			{
+				if (s[i]==']')
+				{
+					s[i] = ' ';
+					break;
+				}
+			}
+			snapshot.push_back(s);
+		}
+		else if (regex_match (s,reg))
+		{
+			string tmp;
+			int t,r;
+			for (string::iterator it=s.begin();it!=s.end();++it)
+			{
+				if(*it=='=')
+				{
+					int n=0;
+					while(1)
+					{
+						tmp[n++] = *it;
+						++it;
+						if (*it=='x')
+							break;
+					}
+					r = atoi(tmp);
+					rotation.push_back(r);
+				}
+				
+				if (*it=='x')
+				{
+					int n=0;
+					while(1)
+					{
+						tmp[n++] = *it;
+						++it;
+						if(*it=='m' || *it=='h' || *it=='d' || *it=='w')
+							break;
+					}
+					t = atoi (tmp);
+					if (*it=='m')
+						t *= 60;
+					else if (*it=='h')
+						t = t * 60 * 60;
+					else if (*it=='d')
+						t = t*24*60*60;
+					else if (*it=='w')
+						t = t*7*24*60*60;
+					time.push_back(t);
+				}
+			}
+		}
+	}
+	
+	while(1)
+	{
+		for (vector<int>::iterator it=time.begin();it!=time.end();++it)
+		{
+			
+		}
+	}
 }
