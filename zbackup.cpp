@@ -6,13 +6,15 @@
 #include <sstream>
 #include <vector>
 #include <regex>
+#include <sys/time.h>
+#include <cstring>
 
 using namespace std;
 
 void list (bool,string);
 void del(string, int);
 void create(string, int);
-void daemon(string);
+void daemon(string,int,int);
 
 int main (int argc, char** argv)
 {
@@ -23,7 +25,7 @@ int main (int argc, char** argv)
 		cout << "please enter the option" << endl;
 		return 0;
 	}
-
+//list
 	cmd1 = argv[1];
 	if (cmd1 == "--list")
 	{
@@ -60,6 +62,7 @@ int main (int argc, char** argv)
 		else 
 			list (false,argv[2]);
 	}
+//delete
 	else if (cmd1 == "--delete")
 	{
 		if (argc-1 < 2)
@@ -75,36 +78,118 @@ int main (int argc, char** argv)
 			del(argv[2],num);
 		}
 	}
+//daemon
 	else if (cmd1 == "-d" || cmd1 == "--daemon")
 	{
+		string path;
 		if (argc-1 < 2)
-			system("./zbackup daemon &");
+			path = "/usr/local/etc/zbackup.conf";
 		else
 		{
 			string cmd2 = argv[2];
 			if (cmd2 == "-c" || cmd2 == "--config")
 			{
 				if (argc-1 < 3)
-					cout << "please enter the config file path" << endl;
-				else 
 				{
-					string cmd3 = argv[3];
-					string cmd = "./zbackup daemon " + cmd3 + "&";
-					system(cmd.c_str());
+					cout << "please enter the config file path" << endl;
+					return 0;
+				}
+				else 
+					path = argv[3];
+			}
+		}
+
+		fstream conf;
+		string s;
+		vector<string> snapshot;
+		vector<string> rotation;
+		vector<string> exe_time;
+		regex policy("(policy=)(.*)");
+		
+		conf.open(path);
+		while(conf >> s)
+		{
+			if (s[0]=='[')
+			{
+				s[0] = ' ';
+				for (int i=0;;++i)
+				{
+					if (s[i]==']')
+					{
+						s[i] = ' ';
+						break;
+					}
+				}
+				snapshot.push_back(s);
+			}
+			else if (regex_match (s,policy))
+			{
+				int t;
+				for (string::iterator it=s.begin();it!=s.end();++it)
+				{
+					if(*it=='=')
+					{
+						string tmp;
+						int n=0;
+						++it;
+						while(1)
+						{
+							tmp[n++] = *it;
+							++it;
+							if (*it=='x')
+								break;
+						}
+						rotation.push_back(tmp);
+					}
+					
+					if (*it=='x')
+					{
+						string tmp;
+						int n=0;
+						++it;
+						while(1)
+						{
+							tmp[n++] = *it;
+							++it;
+							if(*it=='m' || *it=='h' || *it=='d' || *it=='w')
+								break;
+						}
+						t = atoi (tmp.c_str());
+						if (*it=='m')
+							t *= 60;
+						else if (*it=='h')
+							t = t * 60 * 60;
+						else if (*it=='d')
+							t = t*24*60*60;
+						else if (*it=='w')
+							t = t*7*24*60*60;
+						tmp = to_string(t);
+						exe_time.push_back(tmp);
+					}
 				}
 			}
+		}
+		for(int i=0;i<snapshot.size();++i)
+		{
+			string snap = snapshot[i];
+			string r = rotation[i];
+			string t = exe_time[i];
+
+			string cmd = "./zbackup daemon" + snap + r + t + " &";
+			system(cmd.c_str());
 		}
 	}
 	else if (cmd1=="daemon")
 	{
-		if (argc-1 < 2)
-			daemon("/usr/local/etc/zbackup.conf");
-		else
-		{
-			string cmd2 = argv[2];
-			daemon(cmd2);
-		}
+		string num;
+		int cycle,rotation;
+		num = argv[2];
+		cycle = atoi(num.c_str());
+		num = argv[3];
+		rotation = atoi(num.c_str());
+		daemon(argv[1],cycle,rotation);
 	}
+//create
 	else
 	{
 		if (argc-1 < 2)
@@ -387,81 +472,14 @@ void create (string snapshot, int rotation)
 	return ;
 }
 
-void daemon (string path)
-{
-	fstream conf;
-	string s;
-	vector<string> snapshot;
-	vector<int> rotation;
-	vector<int> time;
-	regex policy("(policy=)(.*)")
-	
-	conf.open(path);
-	while(conf >> s)
-	{
-		if (s[0]=='[')
-		{
-			s[0] == ' ';
-			for (int i=0;;++i)
-			{
-				if (s[i]==']')
-				{
-					s[i] = ' ';
-					break;
-				}
-			}
-			snapshot.push_back(s);
-		}
-		else if (regex_match (s,reg))
-		{
-			string tmp;
-			int t,r;
-			for (string::iterator it=s.begin();it!=s.end();++it)
-			{
-				if(*it=='=')
-				{
-					int n=0;
-					while(1)
-					{
-						tmp[n++] = *it;
-						++it;
-						if (*it=='x')
-							break;
-					}
-					r = atoi(tmp);
-					rotation.push_back(r);
-				}
-				
-				if (*it=='x')
-				{
-					int n=0;
-					while(1)
-					{
-						tmp[n++] = *it;
-						++it;
-						if(*it=='m' || *it=='h' || *it=='d' || *it=='w')
-							break;
-					}
-					t = atoi (tmp);
-					if (*it=='m')
-						t *= 60;
-					else if (*it=='h')
-						t = t * 60 * 60;
-					else if (*it=='d')
-						t = t*24*60*60;
-					else if (*it=='w')
-						t = t*7*24*60*60;
-					time.push_back(t);
-				}
-			}
-		}
-	}
-	
+void daemon (string snapshot, int rotation, int cycle)
+{	
 	while(1)
 	{
-		for (vector<int>::iterator it=time.begin();it!=time.end();++it)
-		{
-			
-		}
+		int t = cycle;
+		while(alarm(t));
+		create(snapshot,rotation);
 	}
+
+	return ;
 }
