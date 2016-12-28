@@ -8,13 +8,15 @@
 #include <regex>
 #include <sys/time.h>
 #include <cstring>
+#include <libutil.h>
 
 using namespace std;
 
 void list (bool,string);
 void del(string, int);
 void create(string, int);
-void daemon(string,int,int);
+void daemon(string,int,string);
+void stop ();
 
 int main (int argc, char** argv)
 {
@@ -102,92 +104,79 @@ int main (int argc, char** argv)
 		fstream conf;
 		string s;
 		vector<string> snapshot;
-		vector<string> rotation;
-		vector<string> exe_time;
+		vector<int> rotation;
+		vector<int> exe_time;
 		regex policy("(policy=)(.*)");
 		
 		conf.open(path);
-		while(conf >> s)
+		while (conf >> s)
 		{
 			if (s[0]=='[')
 			{
 				s[0] = ' ';
-				for (int i=0;;++i)
-				{
-					if (s[i]==']')
-					{
-						s[i] = ' ';
-						break;
-					}
-				}
+				s.back() = ' ';
 				snapshot.push_back(s);
 			}
-			else if (regex_match (s,policy))
+			else if (regex_match(s,policy))
 			{
-				int t;
-				for (string::iterator it=s.begin();it!=s.end();++it)
+				stringstream ss;
+				char c;
+				ss << s;
+				while (ss >> c)
 				{
-					if(*it=='=')
+					if (c=='=')
 					{
-						string tmp;
-						int n=0;
-						++it;
-						while(1)
-						{
-							tmp[n++] = *it;
-							++it;
-							if (*it=='x')
-								break;
-						}
-						rotation.push_back(tmp);
+						int r;
+						ss >> r;
+						rotation.push_back(r);
 					}
-					
-					if (*it=='x')
+					else if (c=='x')
 					{
-						string tmp;
-						int n=0;
-						++it;
-						while(1)
-						{
-							tmp[n++] = *it;
-							++it;
-							if(*it=='m' || *it=='h' || *it=='d' || *it=='w')
-								break;
-						}
-						t = atoi (tmp.c_str());
-						if (*it=='m')
-							t *= 60;
-						else if (*it=='h')
-							t = t * 60 * 60;
-						else if (*it=='d')
-							t = t*24*60*60;
-						else if (*it=='w')
-							t = t*7*24*60*60;
-						tmp = to_string(t);
-						exe_time.push_back(tmp);
+						int n;
+						char t;
+						ss >> n;
+						ss >> t;
+						if (t=='m')
+							n *= 60;
+						else if (t=='h')
+							n = n * 60 * 60;
+						else if (t=='d')
+							n = n * 24 * 60 * 60;
+						else if (t=='w')
+							n = n * 7 * 24 * 60 * 60;
+
+						exe_time.push_back(n);
 					}
 				}
 			}
 		}
+
 		for(int i=0;i<snapshot.size();++i)
 		{
 			string snap = snapshot[i];
-			string r = rotation[i];
-			string t = exe_time[i];
+			int r = rotation[i];
+			int t = exe_time[i];
+			
+			string rotate = to_string(r);
+			string wait = to_string(t);
 
-			string cmd = "./zbackup daemon" + snap + r + t + " &";
+			string cmd = "/home/chan/SA04/zbackup daemon" + snap + rotate + " " + wait + " &";
 			system(cmd.c_str());
 		}
 	}
 	else if (cmd1=="daemon")
 	{
 		string num;
-		int cycle,rotation;
-		num = argv[2];
-		cycle = atoi(num.c_str());
+		int rotation;
 		num = argv[3];
 		rotation = atoi(num.c_str());
-		daemon(argv[1],cycle,rotation);
+
+		daemon(argv[2],rotation,argv[4]);
+	}
+//stop
+	else if (cmd1=="stop")
+	{
+		stop();
 	}
 //create
 	else
@@ -450,7 +439,7 @@ void create (string snapshot, int rotation)
 	
 	if (current > rotation)
 	{
-		int del = current - rotation;
+		unsigned int del = current - rotation;
 		system("rm .list");
 		open = fopen(".list","a");
 		for (unsigned int n=0,i=0;n<dataset.size();++n)
@@ -472,13 +461,28 @@ void create (string snapshot, int rotation)
 	return ;
 }
 
-void daemon (string snapshot, int rotation, int cycle)
+void daemon (string snapshot, int rotation, string cycle)
 {	
-	while(1)
+	while (1)
 	{
-		int t = cycle;
-		while(alarm(t));
+		string cmd = "sleep " + cycle;
+
+		system(cmd.c_str());
 		create(snapshot,rotation);
+	}
+	return ;
+}
+
+void stop()
+{
+	fstream file;
+	string s;
+
+	file.open("/var/run/zbackup.pid");
+	while(file >> s)
+	{
+		string cmd = "kill " + s;
+		system(cmd.c_str());
 	}
 
 	return ;
